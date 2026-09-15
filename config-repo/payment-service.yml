@@ -1,0 +1,9 @@
+# payment-service specific configuration (no secrets)
+server:
+  port: 8084
+
+app:
+  payment:
+    provider: mock
+    currency: USD
+    # Secrets (API keys, credentials) must come from environment variables / a secret store — never commit them.

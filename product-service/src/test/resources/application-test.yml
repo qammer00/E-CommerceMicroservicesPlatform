@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: product-service
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+  cache:
+    type: simple
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/ecommerce_catalog_test
+    redis:
+      repositories:
+        enabled: false
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.RedisAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.RedisRepositoriesAutoConfiguration
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+app:
+  cache:
+    products-ttl-ms: 300000
+    product-lists-ttl-ms: 120000
+
+management:
+  health:
+    redis:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+server:
+  port: 0

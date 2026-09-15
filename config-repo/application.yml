@@ -1,0 +1,18 @@
+# Shared configuration for all services (no secrets)
+platform:
+  name: ecommerce-microservices
+  environment: local
+
+logging:
+  level:
+    root: INFO
+    org.springframework: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

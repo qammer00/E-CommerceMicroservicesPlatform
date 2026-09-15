@@ -1,0 +1,47 @@
+services:
+  mysql-users:
+    image: mysql:8.4
+    container_name: ecommerce-mysql-users
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ecommerce_users
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_users_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongodb-catalog:
+    image: mongo:7.0
+    container_name: ecommerce-mongodb-catalog
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_catalog_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis-cache:
+    image: redis:7.4-alpine
+    container_name: ecommerce-redis-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_cache_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql_users_data:
+  mongodb_catalog_data:
+  redis_cache_data:

@@ -1,0 +1,98 @@
+# order-service configuration (no secrets — use environment variables)
+server:
+  port: 8083
+
+spring:
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/ecommerce_orders?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  cloud:
+    openfeign:
+      circuitbreaker:
+        # Use annotation-based Resilience4j on ProductCatalogService so HTTP 4xx
+        # (not found / insufficient stock) are not swallowed by a Feign fallback.
+        enabled: false
+      client:
+        config:
+          product-service:
+            connectTimeout: 2000
+            readTimeout: 3000
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  order:
+    max-items-per-order: 50
+    status-on-create: PENDING
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      productService:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 50
+        slowCallRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        ignoreExceptions:
+          - com.ecommerce.orderservice.exception.ProductNotFoundException
+          - com.ecommerce.orderservice.exception.InsufficientStockException
+          - com.ecommerce.orderservice.exception.InactiveProductException
+  timelimiter:
+    instances:
+      productService:
+        timeoutDuration: 3s
+  retry:
+    instances:
+      productService:
+        maxAttempts: 3
+        waitDuration: 200ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - feign.RetryableException
+          - com.ecommerce.orderservice.exception.ProductServiceUnavailableException
+        ignoreExceptions:
+          - com.ecommerce.orderservice.exception.ProductNotFoundException
+          - com.ecommerce.orderservice.exception.InsufficientStockException
+          - com.ecommerce.orderservice.exception.InactiveProductException
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  health:
+    circuitbreakers:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when_authorized

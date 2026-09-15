@@ -1,0 +1,10 @@
+# notification-service specific configuration (no secrets)
+server:
+  port: 8085
+
+app:
+  notification:
+    channels:
+      - email
+      - in-app
+    retry-attempts: 3

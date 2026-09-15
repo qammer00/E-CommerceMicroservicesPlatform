@@ -1,0 +1,52 @@
+# product-service configuration (no secrets — use environment variables)
+server:
+  port: 8082
+
+spring:
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/ecommerce_catalog}
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  cache:
+    type: redis
+    redis:
+      time-to-live: ${CACHE_TTL_MS:300000}
+      cache-null-values: false
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+app:
+  product:
+    catalog-page-size: 20
+    currency: USD
+  cache:
+    products-ttl-ms: ${CACHE_PRODUCTS_TTL_MS:300000}
+    product-lists-ttl-ms: ${CACHE_PRODUCT_LISTS_TTL_MS:120000}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  health:
+    mongo:
+      enabled: true
+    redis:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when_authorized
