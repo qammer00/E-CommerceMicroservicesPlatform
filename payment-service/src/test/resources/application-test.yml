@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: payment-service
+  config:
+    import: "optional:configserver:"
+  cloud:
+    config:
+      enabled: false
+      import-check:
+        enabled: false
+    openfeign:
+      circuitbreaker:
+        enabled: false
+  datasource:
+    url: jdbc:h2:mem:ecommerce_payments;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+  flyway:
+    enabled: false
+  autoconfigure:
+    exclude:
+      - org.springframework.cloud.netflix.eureka.EurekaClientAutoConfiguration
+      - org.springframework.cloud.netflix.eureka.EurekaDiscoveryClientConfiguration
+
+server:
+  port: 0
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+app:
+  jwt:
+    secret: test-jwt-secret-key-at-least-32-characters-long
+    expiration-ms: 3600000
+  payment:
+    currency: PKR
+    provider: mock
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      orderService:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        ignoreExceptions:
+          - com.ecommerce.paymentservice.exception.PaymentOrderNotFoundException
+          - com.ecommerce.paymentservice.exception.PaymentOrderMismatchException
+          - com.ecommerce.paymentservice.exception.InvalidOrderForPaymentException
+  retry:
+    instances:
+      orderService:
+        maxAttempts: 1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

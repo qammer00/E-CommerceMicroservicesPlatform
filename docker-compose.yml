@@ -1,47 +1,237 @@
 services:
-  mysql-users:
+  mysql:
     image: mysql:8.4
-    container_name: ecommerce-mysql-users
+    container_name: ecommerce-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
-      MYSQL_DATABASE: ecommerce_users
     ports:
-      - "3306:3306"
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
-      - mysql_users_data:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-rootpass}"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 30s
 
-  mongodb-catalog:
+  mongodb:
     image: mongo:7.0
-    container_name: ecommerce-mongodb-catalog
-    ports:
-      - "27017:27017"
+    container_name: ecommerce-mongodb
     volumes:
-      - mongodb_catalog_data:/data/db
+      - mongodb_data:/data/db
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 20s
 
-  redis-cache:
+  redis:
     image: redis:7.4-alpine
-    container_name: ecommerce-redis-cache
-    ports:
-      - "6379:6379"
+    container_name: ecommerce-redis
     volumes:
-      - redis_cache_data:/data
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
 
+  config-server:
+    build: ./config-server
+    container_name: ecommerce-config-server
+    environment:
+      SPRING_CLOUD_CONFIG_SERVER_NATIVE_SEARCH_LOCATIONS: file:/config-repo
+    volumes:
+      - ./config-repo:/config-repo:ro
+    ports:
+      - "8888:8888"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  discovery-server:
+    build: ./discovery-server
+    container_name: ecommerce-discovery-server
+    environment:
+      EUREKA_INSTANCE_HOSTNAME: discovery-server
+    ports:
+      - "8761:8761"
+    depends_on:
+      config-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: ecommerce-api-gateway
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+    ports:
+      - "8080:8080"
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 50s
+
+  user-service:
+    build: ./user-service
+    container_name: ecommerce-user-service
+    environment: &app-env
+      CONFIG_SERVER_URI: http://config-server:8888
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USERNAME: root
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-key-min-32-chars}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecommerce_users?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      APP_JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-key-min-32-chars}
+    ports:
+      - "8081:8081"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
+  product-service:
+    build: ./product-service
+    container_name: ecommerce-product-service
+    environment:
+      CONFIG_SERVER_URI: http://config-server:8888
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://discovery-server:8761/eureka/
+      MONGODB_URI: mongodb://mongodb:27017/ecommerce_catalog
+      SPRING_MONGODB_URI: mongodb://mongodb:27017/ecommerce_catalog
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_CLOUD_CONFIG_OVERRIDESYSTEMPROPERTIES: "false"
+    ports:
+      - "18082:8082"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
+  order-service:
+    build: ./order-service
+    container_name: ecommerce-order-service
+    environment:
+      <<: *app-env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecommerce_orders?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      APP_JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-key-min-32-chars}
+    ports:
+      - "8083:8083"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
+  payment-service:
+    build: ./payment-service
+    container_name: ecommerce-payment-service
+    environment:
+      <<: *app-env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecommerce_payments?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      APP_JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-key-min-32-chars}
+    ports:
+      - "8084:8084"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
+  notification-service:
+    build: ./notification-service
+    container_name: ecommerce-notification-service
+    environment:
+      <<: *app-env
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecommerce_notifications?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      APP_JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-key-min-32-chars}
+    ports:
+      - "8085:8085"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+
 volumes:
-  mysql_users_data:
-  mongodb_catalog_data:
-  redis_cache_data:
+  mysql_data:
+  mongodb_data:
+  redis_data:

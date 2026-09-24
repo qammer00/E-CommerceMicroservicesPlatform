@@ -22,6 +22,10 @@ spring:
               uri: lb://PAYMENT-SERVICE
               predicates:
                 - Path=/api/payments/**
+            - id: notification-service
+              uri: lb://NOTIFICATION-SERVICE
+              predicates:
+                - Path=/api/notifications/**
 
 server:
   port: 8080
@@ -29,7 +33,7 @@ server:
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://localhost:8761/eureka/}
   instance:
     prefer-ip-address: true
 

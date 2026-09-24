@@ -8,9 +8,9 @@ spring:
         enabled: false
   cache:
     type: simple
+  mongodb:
+    uri: mongodb://localhost:27017/ecommerce_catalog_test
   data:
-    mongodb:
-      uri: mongodb://localhost:27017/ecommerce_catalog_test
     redis:
       repositories:
         enabled: false

@@ -2,7 +2,7 @@ spring:
   application:
     name: product-service
   config:
-    import: optional:configserver:http://localhost:8888
+    import: optional:configserver:${CONFIG_SERVER_URI:http://localhost:8888}
   data:
     redis:
       repositories:

@@ -19,7 +19,17 @@ class ProductServiceApplicationTests {
 
     @DynamicPropertySource
     static void mongoProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.data.mongodb.uri", () -> mongo.getConnectionString() + "ecommerce_catalog");
+        registry.add("spring.mongodb.uri", () -> withDatabase(mongo.getConnectionString(), "ecommerce_catalog"));
+    }
+
+    private static String withDatabase(String connectionString, String database) {
+        int queryIndex = connectionString.indexOf('?');
+        if (queryIndex >= 0) {
+            String base = connectionString.substring(0, queryIndex);
+            String query = connectionString.substring(queryIndex);
+            return (base.endsWith("/") ? base : base + "/") + database + query;
+        }
+        return (connectionString.endsWith("/") ? connectionString : connectionString + "/") + database;
     }
 
     @Test

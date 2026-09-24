@@ -2,7 +2,7 @@
 
 Production-style portfolio project demonstrating a modular e-commerce backend built with **Java 21**, **Spring Boot 4.x**, and **Spring Cloud**.
 
-The platform is delivered **incrementally by phase**. Current status: **Phase 0–6** (platform through Order Service) are complete.
+The platform is delivered **incrementally by phase**. Current status: **Phase 0–7** (platform through Payment Service) are complete.
 
 ## Purpose
 
@@ -60,7 +60,7 @@ Cross-cutting capabilities:
 | `user-service` | 8081 | Users, auth-related APIs (**Phase 4**) |
 | `product-service` | 8082 | Product catalog (**Phase 5**) |
 | `order-service` | 8083 | Order lifecycle (**Phase 6**) |
-| `payment-service` | 8084 | Payment processing |
+| `payment-service` | 8084 | Payment processing (**Phase 7**) |
 | `notification-service` | 8085 | Email/SMS/push notifications |
 
 ## Technologies
@@ -71,13 +71,14 @@ Cross-cutting capabilities:
 | Framework | Spring Boot **4.1.1** |
 | Spring Cloud | **2025.1.3** (verified via [start.spring.io](https://start.spring.io) for Boot 4.1.1) |
 | Build | Maven (each service independently buildable) |
-| Containers | Docker / Docker Compose (placeholder) |
-| Data stores | MySQL (`user-service`, `order-service`), MongoDB + Redis (`product-service`) |
-| Messaging (planned) | Apache Kafka |
-| Resilience | Resilience4j on Order → Product synchronous calls (**Phase 6**) |
-| Security | Spring Security + JWT (`user-service`, `order-service`) |
+| Containers | Docker / Docker Compose |
+| Data stores | MySQL (`user-service`, `order-service`, `payment-service`, `notification-service`), MongoDB + Redis (`product-service`) |
+| Messaging (planned) | Apache Kafka (not required for current phases) |
+| Resilience | Resilience4j on Order→Product and Payment→Order synchronous calls |
+| Security | Spring Security + JWT (`user-service`, `order-service`, `payment-service`, `notification-service`) |
 | API docs | OpenAPI / Swagger |
 | Testing | JUnit 5 + Mockito + Testcontainers |
+| CI/CD | GitHub Actions (`.github/workflows/ci.yml`) |
 
 ## Current Implementation Status
 
@@ -90,7 +91,11 @@ Cross-cutting capabilities:
 | **Phase 4** | User Service (JPA, MySQL, JWT, Eureka, Config client) | **Complete** |
 | **Phase 5** | Product Service (MongoDB, Redis cache, Eureka, Config client) | **Complete** |
 | **Phase 6** | Order Service (JPA, MySQL, Feign→Product, Resilience4j, JWT) | **Complete** |
-| Phase 7+ | Payment, Notification, messaging, etc. | Not started |
+| **Phase 7** | Payment Service (JPA, MySQL, Feign→Order, Resilience4j, JWT) | **Complete** |
+| **Phase 8** | Notification Service (JPA, MySQL, JWT, ownership APIs) | **Complete** |
+| **Phase 9** | Docker + full runtime (`docker-compose.yml`) | **Complete** |
+| **Phase 10** | Testing + lightweight observability (Actuator health, logs, request IDs) | **Complete** |
+| **Phase 11** | Deployment docs + GitHub Actions CI | **Complete** |
 
 ### Phase 1 — Config Server
 
@@ -700,6 +705,31 @@ mvn clean test
 
 Includes Mockito unit tests and MockMvc + H2 integration tests.
 
+### Phase 7 — Payment Service
+
+`payment-service` records payments against orders in MySQL (`ecommerce_payments`), reuses JWT auth, and calls Order Service via Eureka/OpenFeign. Clients never supply amount, userId, currency, paymentReference, or status.
+
+**Status lifecycle:** `PENDING → PROCESSING → PAID → REFUNDED` (also `PENDING|PROCESSING → FAILED`).
+
+**APIs:** `POST /api/payments`, `GET /api/payments/{id}`, `GET /api/payments/my-payments`, `GET /api/payments` (ADMIN), `PATCH /api/payments/{id}/status` (ADMIN).
+
+```bash
+export JWT_SECRET='local-dev-jwt-secret-key-min-32-chars'
+export DB_USERNAME='root'
+export DB_PASSWORD='rootpass'
+cd payment-service && mvn spring-boot:run
+curl http://localhost:8084/actuator/health
+```
+
+Sample create:
+
+```bash
+curl -X POST http://localhost:8080/api/payments \
+  -H "Authorization: Bearer <token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"orderId":1,"method":"CASH_ON_DELIVERY"}'
+```
+
 ## Repository Layout
 
 ```text
@@ -720,4 +750,10 @@ ecommerce-microservices/
 
 ## Next Step
 
-**Phase 7 — Payment Service**: implement `payment-service` for payment processing against confirmed orders.
+**Phase 8 — Notification Service**: in-app notifications with JWT ownership, ADMIN create via `NotificationCreator`, Flyway MySQL.
+
+**Phase 9 — Docker**: full `docker-compose.yml` for infra + all 8 apps; see `DEPLOYMENT.md`.
+
+**Phase 10 — Testing + Observability**: Maven suites green; Actuator health + request IDs; Resilience4j health on order/payment.
+
+**Phase 11 — CI/CD**: `.github/workflows/ci.yml` (test, package, compose validate/build); deployment guide in `DEPLOYMENT.md`.
