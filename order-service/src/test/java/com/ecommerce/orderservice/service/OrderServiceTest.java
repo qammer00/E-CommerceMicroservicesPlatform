@@ -257,11 +257,13 @@ class OrderServiceTest {
         authenticate(2L, "admin@example.com", "ADMIN");
         Order order = ownedOrder(8L, 1L, OrderStatus.PENDING);
         when(orderRepository.findById(8L)).thenReturn(Optional.of(order));
-        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderPersistenceService.updateStatusAndPublish(any(Order.class), eq(OrderStatus.CONFIRMED)))
+                .thenReturn(sampleResponse(8L, 1L, OrderStatus.CONFIRMED, List.of()));
 
         OrderResponse response = orderService.updateStatus(8L, new UpdateOrderStatusRequest(OrderStatus.CONFIRMED));
 
         assertThat(response.status()).isEqualTo(OrderStatus.CONFIRMED);
+        verify(orderPersistenceService).updateStatusAndPublish(any(Order.class), eq(OrderStatus.CONFIRMED));
     }
 
     @Test

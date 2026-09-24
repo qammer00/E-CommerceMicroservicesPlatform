@@ -73,7 +73,7 @@ Cross-cutting capabilities:
 | Build | Maven (each service independently buildable) |
 | Containers | Docker / Docker Compose |
 | Data stores | MySQL (`user-service`, `order-service`, `payment-service`, `notification-service`), MongoDB + Redis (`product-service`) |
-| Messaging (planned) | Apache Kafka (not required for current phases) |
+| Messaging | Apache Kafka (KRaft) for domain events |
 | Resilience | Resilience4j on Order→Product and Payment→Order synchronous calls |
 | Security | Spring Security + JWT (`user-service`, `order-service`, `payment-service`, `notification-service`) |
 | API docs | OpenAPI / Swagger |
@@ -750,10 +750,47 @@ ecommerce-microservices/
 
 ## Next Step
 
-**Phase 8 — Notification Service**: in-app notifications with JWT ownership, ADMIN create via `NotificationCreator`, Flyway MySQL.
+Phases 0–11 and Kafka event backbone are complete. See Kafka architecture below and `DEPLOYMENT.md` for runtime.
 
-**Phase 9 — Docker**: full `docker-compose.yml` for infra + all 8 apps; see `DEPLOYMENT.md`.
+## Kafka architecture
 
-**Phase 10 — Testing + Observability**: Maven suites green; Actuator health + request IDs; Resilience4j health on order/payment.
+Kafka (KRaft, no ZooKeeper) is the asynchronous domain-event backbone. Synchronous REST/OpenFeign remains for request/response validation.
 
-**Phase 11 — CI/CD**: `.github/workflows/ci.yml` (test, package, compose validate/build); deployment guide in `DEPLOYMENT.md`.
+### REST / Feign (unchanged)
+
+| Flow | Why sync |
+| --- | --- |
+| Order → Product `get` / `reserve` / `release` | Immediate stock validation and compensation |
+| Payment → Order `GET` | Ownership, amount, and order-status checks before payment create |
+| All user-facing HTTP APIs | Immediate success/failure |
+
+### Kafka (async)
+
+| Topic | Partitions | Producers | Consumers |
+| --- | --- | --- | --- |
+| `order-events` | 3 | order-service (outbox) | notification-service (`notification-service-group`) |
+| `payment-events` | 3 | payment-service (outbox) | notification-service (same group) |
+| `product-events` | 3 | product-service (best-effort after stock ops) | future consumers |
+| `*.DLT` | 3 | consumer error handler | ops / replay |
+
+**Event envelope:** `eventId`, `eventType`, `occurredAt`, `aggregateId`, `aggregateType`, `userId`, `payload`.
+
+**Order events:** `ORDER_CREATED`, `ORDER_CONFIRMED`, `ORDER_PROCESSING`, `ORDER_SHIPPED`, `ORDER_DELIVERED`, `ORDER_CANCELLED`  
+**Payment events:** `PAYMENT_CREATED`, `PAYMENT_PAID`, `PAYMENT_FAILED`, `PAYMENT_REFUNDED`  
+**Product events:** `STOCK_RESERVED`, `STOCK_RELEASED`
+
+**Keys:** orderId / paymentId / productId for per-aggregate ordering.
+
+**Reliability:** at-least-once delivery. Order/payment use a transactional **outbox** (Flyway `outbox_events`) so DB commits do not depend on Kafka availability. Notification consumers are **idempotent** via `processed_events.event_id`. Failed handler processing retries then goes to DLT. Product stock events are best-effort (Mongo has no SQL outbox in this version).
+
+**Scaling:** multiple `notification-service` instances share `notification-service-group`; partitions balance across them.
+
+```text
+Order/Payment DB TX ──► outbox_events ──► OutboxPublisher ──► Kafka topics
+                                                              │
+Product stock save ──► (best-effort) ─────────────────────────┤
+                                                              ▼
+                                              notification-service-group
+                                                              │
+                                                      NotificationCreator
+```

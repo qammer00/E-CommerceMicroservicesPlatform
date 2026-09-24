@@ -25,6 +25,7 @@ import com.ecommerce.paymentservice.exception.PaymentNotFoundException;
 import com.ecommerce.paymentservice.exception.PaymentOrderMismatchException;
 import com.ecommerce.paymentservice.exception.PaymentOrderNotFoundException;
 import com.ecommerce.paymentservice.exception.PaymentOrderUnavailableException;
+import com.ecommerce.paymentservice.outbox.OutboxEventWriter;
 import com.ecommerce.paymentservice.repository.PaymentRepository;
 import com.ecommerce.paymentservice.security.AuthenticatedUser;
 import java.math.BigDecimal;
@@ -55,6 +56,9 @@ class PaymentServiceTest {
 
     @Mock
     private PaymentProperties paymentProperties;
+
+    @Mock
+    private OutboxEventWriter outboxEventWriter;
 
     @InjectMocks
     private PaymentService paymentService;

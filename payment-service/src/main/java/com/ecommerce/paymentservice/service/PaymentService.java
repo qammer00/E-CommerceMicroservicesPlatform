@@ -15,12 +15,15 @@ import com.ecommerce.paymentservice.exception.PaymentAlreadyExistsException;
 import com.ecommerce.paymentservice.exception.PaymentNotFoundException;
 import com.ecommerce.paymentservice.exception.PaymentOrderMismatchException;
 import com.ecommerce.paymentservice.mapper.PaymentMapper;
+import com.ecommerce.paymentservice.outbox.OutboxEventWriter;
 import com.ecommerce.paymentservice.repository.PaymentRepository;
 import com.ecommerce.paymentservice.security.AuthenticatedUser;
 import com.ecommerce.paymentservice.security.SecurityUtils;
+import com.ecommerce.paymentservice.event.PaymentEventTypes;
 import java.math.RoundingMode;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,14 +51,17 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final OrderLookupService orderLookupService;
     private final PaymentProperties paymentProperties;
+    private final OutboxEventWriter outboxEventWriter;
 
     public PaymentService(
             PaymentRepository paymentRepository,
             OrderLookupService orderLookupService,
-            PaymentProperties paymentProperties) {
+            PaymentProperties paymentProperties,
+            OutboxEventWriter outboxEventWriter) {
         this.paymentRepository = paymentRepository;
         this.orderLookupService = orderLookupService;
         this.paymentProperties = paymentProperties;
+        this.outboxEventWriter = outboxEventWriter;
     }
 
     @Transactional
@@ -93,7 +99,9 @@ public class PaymentService {
         payment.setMethod(request.method());
         payment.setStatus(PaymentStatus.PENDING);
 
-        return PaymentMapper.toResponse(paymentRepository.save(payment));
+        Payment saved = paymentRepository.save(payment);
+        enqueuePaymentEvent(saved, PaymentEventTypes.PAYMENT_CREATED);
+        return PaymentMapper.toResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -130,7 +138,36 @@ public class PaymentService {
         Payment payment = getPaymentOrThrow(id);
         assertValidTransition(payment.getStatus(), request.status());
         payment.setStatus(request.status());
-        return PaymentMapper.toResponse(paymentRepository.save(payment));
+        Payment saved = paymentRepository.save(payment);
+        String eventType = mapStatusToEventType(request.status());
+        if (eventType != null) {
+            enqueuePaymentEvent(saved, eventType);
+        }
+        return PaymentMapper.toResponse(saved);
+    }
+
+    private void enqueuePaymentEvent(Payment payment, String eventType) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("paymentReference", payment.getPaymentReference());
+        payload.put("orderId", payment.getOrderId());
+        payload.put("amount", payment.getAmount());
+        payload.put("currency", payment.getCurrency());
+        payload.put("method", payment.getMethod().name());
+        payload.put("status", payment.getStatus().name());
+        outboxEventWriter.enqueuePaymentEvent(
+                eventType,
+                String.valueOf(payment.getId()),
+                String.valueOf(payment.getUserId()),
+                payload);
+    }
+
+    private static String mapStatusToEventType(PaymentStatus status) {
+        return switch (status) {
+            case PAID -> PaymentEventTypes.PAYMENT_PAID;
+            case FAILED -> PaymentEventTypes.PAYMENT_FAILED;
+            case REFUNDED -> PaymentEventTypes.PAYMENT_REFUNDED;
+            case PENDING, PROCESSING -> null;
+        };
     }
 
     private void assertCanView(AuthenticatedUser currentUser, Payment payment) {

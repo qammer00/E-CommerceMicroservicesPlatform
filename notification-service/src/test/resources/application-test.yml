@@ -22,6 +22,8 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.cloud.netflix.eureka.EurekaClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+      - org.springframework.boot.kafka.autoconfigure.KafkaAutoConfiguration
       - org.springframework.cloud.netflix.eureka.EurekaDiscoveryClientConfiguration
 
 server:
@@ -34,6 +36,8 @@ eureka:
     fetch-registry: false
 
 app:
+  kafka:
+    enabled: false
   jwt:
     secret: test-jwt-secret-key-at-least-32-characters-long
     expiration-ms: 3600000

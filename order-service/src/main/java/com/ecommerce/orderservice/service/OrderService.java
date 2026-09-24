@@ -120,8 +120,7 @@ public class OrderService {
         }
         Order order = getOrderOrThrow(id);
         assertValidTransition(order.getStatus(), request.status());
-        order.setStatus(request.status());
-        return OrderMapper.toResponse(orderRepository.save(order));
+        return orderPersistenceService.updateStatusAndPublish(order, request.status());
     }
 
     public OrderResponse cancelOrder(Long id) {

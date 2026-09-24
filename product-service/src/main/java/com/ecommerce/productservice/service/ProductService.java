@@ -12,7 +12,11 @@ import com.ecommerce.productservice.exception.InsufficientStockException;
 import com.ecommerce.productservice.exception.InvalidStockException;
 import com.ecommerce.productservice.exception.ProductNotFoundException;
 import com.ecommerce.productservice.mapper.ProductMapper;
+import com.ecommerce.productservice.event.ProductEventTypes;
+import com.ecommerce.productservice.kafka.StockEventPublisher;
 import com.ecommerce.productservice.repository.ProductRepository;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.time.Instant;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -29,9 +33,11 @@ public class ProductService {
     public static final String CACHE_PRODUCT_LISTS = "productLists";
 
     private final ProductRepository productRepository;
+    private final StockEventPublisher stockEventPublisher;
 
-    public ProductService(ProductRepository productRepository) {
+    public ProductService(ProductRepository productRepository, StockEventPublisher stockEventPublisher) {
         this.productRepository = productRepository;
+        this.stockEventPublisher = stockEventPublisher;
     }
 
     @Caching(evict = {
@@ -173,7 +179,12 @@ public class ProductService {
         }
         product.setStockQuantity(available - quantity);
         product.setUpdatedAt(Instant.now());
-        return ProductMapper.toResponse(productRepository.save(product));
+        ProductResponse response = ProductMapper.toResponse(productRepository.save(product));
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("quantity", quantity);
+        payload.put("remainingStock", response.stockQuantity());
+        stockEventPublisher.publish(ProductEventTypes.STOCK_RESERVED, id, payload);
+        return response;
     }
 
     @Caching(evict = {
@@ -188,7 +199,12 @@ public class ProductService {
         int available = product.getStockQuantity() == null ? 0 : product.getStockQuantity();
         product.setStockQuantity(available + quantity);
         product.setUpdatedAt(Instant.now());
-        return ProductMapper.toResponse(productRepository.save(product));
+        ProductResponse response = ProductMapper.toResponse(productRepository.save(product));
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("quantity", quantity);
+        payload.put("remainingStock", response.stockQuantity());
+        stockEventPublisher.publish(ProductEventTypes.STOCK_RELEASED, id, payload);
+        return response;
     }
 
     private Product getProductOrThrow(String id) {

@@ -17,6 +17,8 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+      - org.springframework.boot.kafka.autoconfigure.KafkaAutoConfiguration
       - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
       - org.springframework.boot.data.redis.autoconfigure.RedisAutoConfiguration
       - org.springframework.boot.data.redis.autoconfigure.RedisRepositoriesAutoConfiguration
@@ -28,6 +30,8 @@ eureka:
     fetch-registry: false
 
 app:
+  kafka:
+    enabled: false
   cache:
     products-ttl-ms: 300000
     product-lists-ttl-ms: 120000

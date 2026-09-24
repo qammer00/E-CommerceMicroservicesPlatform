@@ -16,6 +16,7 @@ import com.ecommerce.productservice.dto.UpdateStockRequest;
 import com.ecommerce.productservice.exception.DuplicateSkuException;
 import com.ecommerce.productservice.exception.InvalidStockException;
 import com.ecommerce.productservice.exception.ProductNotFoundException;
+import com.ecommerce.productservice.kafka.StockEventPublisher;
 import com.ecommerce.productservice.repository.ProductRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -36,6 +37,9 @@ class ProductServiceTest {
 
     @Mock
     private ProductRepository productRepository;
+
+    @Mock
+    private StockEventPublisher stockEventPublisher;
 
     @InjectMocks
     private ProductService productService;
